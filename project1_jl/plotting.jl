@@ -5,44 +5,33 @@ using Printf
 include("helpers.jl")
 include("simple.jl")
 
-abstract type DescentMethod end
+# Create an abstract type for first-order descent methods
+abstract type FirstOrderMethod end
 
-#ADAM CRAP
-mutable struct Adam <: DescentMethod
-    alpha
-    gamma_v
-    gamma_s
-    eps
-    k
-    v
-    s
+#*******************************************************************************
+# Adam Implementation
+mutable struct Adam <: FirstOrderMethod
+    α; γv; γs; ϵ; k; v; s
 end
 
-function adam_init!(M::Adam, f, gradf, x)
-    M.k = 0
-    M.v = zeros(length(x))
-    M.s = zeros(length(x))
-    return M
-end
+adam_init!(A::Adam) = A
 
-function adam_step!(M::Adam, f, gradf, x)
-    alpha, gamma_v, gamma_s, eps, k = M.alpha, M.gamma_v, M.gamma_s, M.eps, M.k
-    s,v,g = M.s, M.v, gradf(x)
-    v[:] = gamma_v*v + (1-gamma_v)*g
-    s[:] = gamma_s*s + (1-gamma_s)*g.*g
-    M.k = k += 1
-    v_hat = v ./ (1 - gamma_v^k)
-    s_hat = s ./ (1 - gamma_s^k)
-    return x - alpha*v_hat ./ (sqrt.(s_hat) .+ eps)
+function adam_step!(A::Adam, ∇f, x)
+    α, γv, γs, ϵ, k, s, v, g = A.α , A.γv, A.γs, A.ϵ, A.k, A.s, A.v, ∇f(x)
+    v[:] = γv*v + (1-γv)*g
+    s[:] = γs*s + (1-γs)*g.*g
+    A.k = k += 1
+    v̂ = v ./ (1 - γv^k)
+    ŝ = s ./ (1 - γs^k)
+    return x - α*v̂ ./ (sqrt.(ŝ) .+ ϵ)
 end
-
 
 function optimize_and_store_path(M, f, g, x_best, n)
     x1_arr = Float64[]; x2_arr = Float64[];
     push!(x1_arr, x_best[1]); push!(x2_arr, x_best[2]);
     k = 1
     while k < n
-        x_best = adam_step!(M,f,g,x_best)
+        x_best = adam_step!(M,g,x_best)
         push!(x1_arr, x_best[1]);push!(x2_arr, x_best[2])
         k = k + 1
     end
@@ -54,7 +43,7 @@ function optimize_and_store_y_vals(M, f, g, x_best, n)
     push!(y_arr, f(x_best))
     k = 1
     while k < n
-        x_best = adam_step!(M,f,g,x_best)
+        x_best = adam_step!(M,g,x_best)
         push!(y_arr, f(x_best))
         k = k + 1
     end
@@ -79,13 +68,15 @@ function plot_rosenbrock_path(f, g, n)
     X = repeat(reshape(x1, 1, :), length(x2), 1)
     Y = repeat(x2, 1, length(x1))
     Z = map(plot_f, X, Y)
-    h = [minimum(Z), 2.5, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, maximum(Z)]
-    contour(x1, x2, Z, levels=h, fill=true, c=cgrad(:viridis, rev = false), linewidth=2.0)
+    #h = [minimum(Z), 2.5, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, maximum(Z)]
+    h = [minimum(Z), 2.5, 10, 25, 100, 250, 500, 1000, 2500, 5000, 10000, 15000, 25000, 35000,maximum(Z)]
+    #h = [minimum(Z), 2.5, 25, 250, 500, 1000, 2500, 5000,10000,25000,50000,maximum(Z)]
+    contour(x1, x2, Z, levels=h, fill=false, c=cgrad(:viridis, rev = true), linewidth=2.0)
 
     # Plot first path
     plot!(x11_arr,x21_arr,color=:magenta, label = "x0: (3.0, -3.0)",legend = :bottomleft,
           title = "Adam Method to Minimize Rosenbrock's Function", titlefontsize = 12,
-          xlabel = "x1", ylabel = "x2", dpi=300)
+          xlabel = "x1", ylabel = "x2", dpi=300, colorbar = false)
     scatter!([x11_arr], [x21_arr], color=:magenta, label = "", markersize = 3, outline = :magenta)
     scatter!([x01[1]], [x01[2]], color=:magenta,  marker = :rect,label = "", markersize = 5)
     scatter!([x1_best[1]], [x1_best[2]], color=:magenta, marker = :star4, label = "", markersize = 7)
@@ -102,7 +93,7 @@ function plot_rosenbrock_path(f, g, n)
     scatter!([x03[1]], [x03[2]], color=:darkorange,  marker = :rect, label = "", markersize = 5)
     scatter!([x3_best[1]], [x3_best[2]], color=:darkorange, marker = :star4, label = "", markersize = 7)
 
-    scatter!([1], [1], color=:gold, marker = :star5, label = "", markersize = 10)
+    scatter!([1], [1], color=:dodgerblue, marker = :star5, label = "", markersize = 10)
 
     png("adam.png")
 
@@ -147,14 +138,49 @@ x0_p_x3 = round(x0_p[3], digits=3); x0_p_x4 = round(x0_p[4], digits=3)
 powell_convergence = 
     return_y_vals(powell, powell_gradient, x0_p, n, "simple3");
 
+
+rosenbrock_convergence1 = 
+    return_y_vals(rosenbrock, rosenbrock_gradient, [3.0, -3.0], n, "simple1");
+rosenbrock_convergence2 = 
+    return_y_vals(rosenbrock, rosenbrock_gradient, [0.0, 3.0], n, "simple1");
+rosenbrock_convergence3 = 
+    return_y_vals(rosenbrock, rosenbrock_gradient, [-1.7, 2.8], n, "simple1");
+    
+himmelblau_convergence1 = 
+    return_y_vals(himmelblau, himmelblau_gradient, [3.0, -3.0], n, "simple2");
+himmelblau_convergence2 = 
+    return_y_vals(himmelblau, himmelblau_gradient, [0.0, 3.0], n, "simple2");
+himmelblau_convergence3 = 
+    return_y_vals(himmelblau, himmelblau_gradient, [-1.7, 2.8], n, "simple2");
+
+powell_convergence1 = 
+    return_y_vals(powell, powell_gradient, [3.0, -3.0, 3.0, -3.0], n, "simple3");
+powell_convergence2 = 
+    return_y_vals(powell, powell_gradient, [0.0, 3.0, 0.0, 3.0], n, "simple3");
+powell_convergence3 = 
+    return_y_vals(powell, powell_gradient, [-1.7, 2.8, -1.7, 2.8], n, "simple3");
+
 x_vals = 1:n
-string
-plot(x_vals, rosenbrock_convergence, lw = 3, 
-     label = ("Rosenbrock, x0 = ("* string(x0_r_x1) * ", " * string(x0_r_x2) * ")"), 
-     title = "Convergence for Select Functions", xlabel = "Iteration", ylabel = "f(x)", dpi = 300)
-plot!(x_vals, himmelblau_convergence, lw = 3, 
-     label = "Himmelblau, x0 = ("* string(x0_h_x1) * ", " * string(x0_h_x2) * ")")
-plot!(x_vals, powell_convergence, lw = 3, 
-     label = "Powell, x0 = ("* string(x0_p_x1) * ", " * string(x0_p_x2) * ", " *
-              string(x0_p_x3) * ", " * string(x0_p_x4) *")")
-png("convergence.png")
+
+plot(x_vals, rosenbrock_convergence1, lw = 3, label = "x0: (3.0, -3.0)",legend = :topright,
+    title="Convergence for Rosenbrock Function",xlabel="Iteration",ylabel="f(x)",dpi=300)
+plot!(x_vals, rosenbrock_convergence2, lw = 3, label = "x0: (0.0, 3.0)")
+plot!(x_vals, rosenbrock_convergence3, lw = 3, label = "x0: (-1.7, 2.8)")
+png("rosenbrock_convergence.png")
+
+plot(x_vals, himmelblau_convergence1, lw = 3, label = "x0: (3.0, -3.0)",legend = :topright,
+    title="Convergence for Himmelblau Function",xlabel="Iteration",ylabel="f(x)",dpi=300)
+plot!(x_vals, himmelblau_convergence2, lw = 3, label = "x0: (0.0, 3.0)")
+plot!(x_vals, himmelblau_convergence3, lw = 3, label = "x0: (-1.7, 2.8)")
+png("himmelblau_convergence.png")
+
+plot(x_vals, powell_convergence1, lw = 3, label = "x0: (3.0, -3.0, 3.0, -3.0)",legend = :topright,
+    title="Convergence for Powell Function",xlabel="Iteration",ylabel="f(x)",dpi=300)
+plot!(x_vals, powell_convergence2, lw = 3, label = "x0: (0.0, 3.0, 0.0, 3.0)")
+plot!(x_vals, powell_convergence3, lw = 3, label = "x0: (-1.7, 2.8, -1.7, 2.8)")
+png("powell_convergence.png")
+
+
+##
+
+print("HELLO")
